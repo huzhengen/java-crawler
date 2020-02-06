@@ -41,7 +41,6 @@ public class Main {
             }
 
             if (isInterestingLink(link)) {
-
                 Document doc = httpGetAndParseHtml(link);
 
                 doc.select("a").stream().map(aTag -> aTag.attr("href")).forEach(linkPool::add);
@@ -50,9 +49,8 @@ public class Main {
                 storeIntoDatabaseIfItIsNewsPage(doc);
 
                 processedLinks.add(link);
-            } else {
-                // 这里是不需要的，不处理
             }
+
         }
     }
 
@@ -66,23 +64,18 @@ public class Main {
         }
     }
 
-    private static Document httpGetAndParseHtml(String link) {
+    private static Document httpGetAndParseHtml(String link) throws IOException {
         // 只处理新浪站内的链接
         CloseableHttpClient httpclient = HttpClients.createDefault();
-
         if (link.startsWith("//")) {
             link = "https" + link;
         }
-        System.out.println(link);
-
         HttpGet httpGet = new HttpGet(link);
         httpGet.addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36");
-
         try (CloseableHttpResponse response1 = httpclient.execute(httpGet)) {
             System.out.println(response1.getStatusLine());
             HttpEntity entity1 = response1.getEntity();
             String html = EntityUtils.toString(entity1);
-
             return Jsoup.parse(html);
         }
     }
