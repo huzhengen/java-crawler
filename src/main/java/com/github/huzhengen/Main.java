@@ -1,5 +1,6 @@
 package com.github.huzhengen;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -11,45 +12,92 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 
 import java.io.IOException;
+import java.sql.*;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class Main {
-    public static void main(String[] args) throws IOException {
-        // 待处理的链接池
-        List<String> linkPool = new ArrayList<>();
-        // 已处理的链接池
-        Set<String> processedLinks = new HashSet<>();
-        linkPool.add("https://sina.cn");
+    public static final String USER_NAME = "root";
+    public static final String PASSWORD = "root";
+
+    @SuppressFBWarnings("DMI_CONSTANT_DB_PASSWORD")
+    public static void main(String[] args) throws IOException, SQLException {
+        Connection connection = DriverManager.getConnection("jdbc:h2:file:E:\\hcsp\\java-crawler\\crawler", USER_NAME, PASSWORD);
 
         while (true) {
+            // 从数据库加载待处理的链接。默认最开始里面有一个链接， 是"https://sina.cn"
+            List<String> linkPool = loadUrlsFromDatabase(connection, "select link from links_to_be_processed");
+
             // 待处理的链接池是空的话
             if (linkPool.isEmpty()) {
                 break;
             }
 
             // ArrayList从尾部删除更有效率
-            // 拿出一个link，并删除他
+            // 从数据库里拿出一个link，并在数据库里删除他
             String link = linkPool.remove(linkPool.size() - 1);
+            insertLinkIntoDatabase(connection, link, "delete from links_to_be_processed where link = ?");
 
-            if (processedLinks.contains(link)) {
-                continue;
+            // 从数据库中 已处理的链接表 里查询，看当前链接是否被处理过了
+            if (!isLinkProcessed(connection, link)) { // 如果没有被处理过，则开始处理这个链接
+                // 如果这个链接是我们感兴趣的，就开始处理
+                if (isInterestingLink(link)) {
+                    // 解析HTML
+                    Document doc = httpGetAndParseHtml(link);
+
+                    parseUrlsFromPageAndStoreIntoDatabase(connection, doc);
+
+                    // 如果是新闻详情页，就存入数据库
+                    storeIntoDatabaseIfItIsNewsPage(doc);
+
+                    // 这个链接处理过了，就把这个链接放入数据库的 已处理链接表 中
+                    insertLinkIntoDatabase(connection, link, "insert into links_already_processed link (values ) (?)");
+                }
             }
-
-            if (isInterestingLink(link)) {
-                Document doc = httpGetAndParseHtml(link);
-
-                doc.select("a").stream().map(aTag -> aTag.attr("href")).forEach(linkPool::add);
-
-                // 如果是新闻详情页，就存入数据库
-                storeIntoDatabaseIfItIsNewsPage(doc);
-
-                processedLinks.add(link);
-            }
-
         }
+    }
+
+    private static void parseUrlsFromPageAndStoreIntoDatabase(Connection connection, Document doc) throws SQLException {
+        for (Element aTag : doc.select("a")) {
+            // 找出a标签链接
+            String href = aTag.attr("href");
+            // 把链接放到待处理的表中
+            insertLinkIntoDatabase(connection, href, "insert into links_to_be_processed link (values ) (?)");
+        }
+    }
+
+    private static boolean isLinkProcessed(Connection connection, String link) throws SQLException {
+        ResultSet resultSet = null;
+        try (PreparedStatement statement = connection.prepareStatement("select link from links_already_processed where link = ?")) {
+            statement.setString(1, link);
+            resultSet = statement.executeQuery();
+            while (resultSet.next()) {
+                return true;
+            }
+        } finally {
+            if (resultSet != null) {
+                resultSet.close();
+            }
+        }
+        return false;
+    }
+
+    private static void insertLinkIntoDatabase(Connection connection, String link, String sql) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, link);
+            statement.executeUpdate();
+        }
+    }
+
+    private static List<String> loadUrlsFromDatabase(Connection connection, String sql) throws SQLException {
+        List<String> results = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                results.add(resultSet.getString(1));
+            }
+        }
+        return results;
     }
 
     private static void storeIntoDatabaseIfItIsNewsPage(Document doc) {
@@ -57,7 +105,7 @@ public class Main {
         if (!articleTags.isEmpty()) {
             for (Element articleTag : articleTags) {
                 String title = articleTags.get(0).child(0).text();
-                System.out.println();
+                System.out.println(title);
             }
         }
     }
