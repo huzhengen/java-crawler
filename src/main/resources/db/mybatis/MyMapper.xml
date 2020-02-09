@@ -14,7 +14,7 @@
         WHERE LINK = #{link}
     </delete>
     <insert id="insertNews" parameterType="com.github.huzhengen.News">
-        insert into news (url, title, content, created_at, modified_at)
+        insert into NEWS (url, title, content, created_at, modified_at)
         values (#{url}, #{title}, #{content}, now(), now())
     </insert>
     <select id="countlink" parameterType="String" resultType="int">
@@ -28,6 +28,6 @@
             <when test="tableName == 'LINKS_ALREADY_PROCESSED'">LINKS_ALREADY_PROCESSED</when>
             <otherwise>LINKS_TO_BE_PROCESSED</otherwise>
         </choose>
-        (link) values #{link}
+        (link) values (#{link})
     </insert>
 </mapper>
