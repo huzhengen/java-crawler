@@ -52,7 +52,10 @@ public class Crawler {
             // 找出a标签链接
             String href = aTag.attr("href");
             if (href.startsWith("//")) {
-                href = "https" + href;
+                href = "https:" + href;
+            }
+            if(!href.contains("sohu.com") && !href.toLowerCase().startsWith("javascript")){
+                href = "https://m.sohu.com" + href;
             }
             if (!href.toLowerCase().startsWith("javascript")) {
                 // 把链接放到待处理的表中
@@ -63,10 +66,12 @@ public class Crawler {
     }
 
     private void storeIntoDatabaseIfItIsNewsPage(Document doc, String link) throws SQLException {
-        ArrayList<Element> articleTags = doc.select("article");
+        ArrayList<Element> articleTags = doc.select(".article-content-wrapper");
         if (!articleTags.isEmpty()) {
             for (Element articleTag : articleTags) {
-                String title = articleTags.get(0).child(0).text();
+//                String title = articleTags.get(0).child(0).text();
+                String title = articleTags.get(0).child(1).text();
+                System.out.println(title);
                 String content = articleTag.select("p").stream().map(Element::text).collect(Collectors.joining("\n"));
                 dao.insertNewsIntoDatabase(link, title, content);
             }
@@ -91,11 +96,11 @@ public class Crawler {
     }
 
     private static boolean isIndexPage(String link) {
-        return "https://sina.cn".equals(link);
+        return "https://m.sohu.com".equals(link);
     }
 
     private static boolean isNewsPage(String link) {
-        return link.contains("news.sina.cn");
+        return link.contains("m.sohu.com/a");
     }
 
     private static boolean isNotLoginPage(String link) {
