@@ -15,35 +15,40 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
 
-public class Crawler {
-    private CrawlerDao dao = new MyBatisCrawlerDao();
+public class Crawler extends Thread {
+    private CrawlerDao dao;
 
-    public static void main(String[] args) throws IOException, SQLException {
-        new Crawler().run();
+    public Crawler(CrawlerDao dao) {
+        this.dao = dao;
     }
 
-    public void run() throws IOException, SQLException {
-        String link;
-        // 先从数据库拿出来一个link，并删除他，然后开始处理这个link。默认最开始里面有一个链接， 是"https://sina.cn"
-        while ((link = dao.getNextLinkThenDelete()) != null) { // 如果link不是null的话，才进入这个while
-            // 从数据库中 已处理的链接表 里查询，看当前链接是否被处理过了
-            if (dao.isLinkProcessed(link)) {
-                continue;
+    @Override
+    public void run() {
+        try {
+            String link;
+            // 先从数据库拿出来一个link，并删除他，然后开始处理这个link。默认最开始里面有一个链接， 是"https://sina.cn"
+            while ((link = dao.getNextLinkThenDelete()) != null) { // 如果link不是null的话，才进入这个while
+                // 从数据库中 已处理的链接表 里查询，看当前链接是否被处理过了
+                if (dao.isLinkProcessed(link)) {
+                    continue;
+                }
+                // 如果这个链接是我们感兴趣的，就开始处理
+                if (isInterestingLink(link)) {
+                    System.out.println(link);
+                    // 解析HTML
+                    Document doc = httpGetAndParseHtml(link);
+
+                    parseUrlsFromPageAndStoreIntoDatabase(doc);
+
+                    // 如果是新闻详情页，就存入数据库
+                    storeIntoDatabaseIfItIsNewsPage(doc, link);
+
+                    // 这个链接处理过了，就把这个链接放入数据库的 已处理链接表 中
+                    dao.insertProcessedLink(link);
+                }
             }
-            // 如果这个链接是我们感兴趣的，就开始处理
-            if (isInterestingLink(link)) {
-                System.out.println(link);
-                // 解析HTML
-                Document doc = httpGetAndParseHtml(link);
-
-                parseUrlsFromPageAndStoreIntoDatabase(doc);
-
-                // 如果是新闻详情页，就存入数据库
-                storeIntoDatabaseIfItIsNewsPage(doc, link);
-
-                // 这个链接处理过了，就把这个链接放入数据库的 已处理链接表 中
-                dao.insertProcessedLink(link);
-            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -54,7 +59,7 @@ public class Crawler {
             if (href.startsWith("//")) {
                 href = "https:" + href;
             }
-            if(!href.contains("sohu.com") && !href.toLowerCase().startsWith("javascript")){
+            if (!href.contains("sohu.com") && !href.toLowerCase().startsWith("javascript")) {
                 href = "https://m.sohu.com" + href;
             }
             if (!href.toLowerCase().startsWith("javascript")) {
